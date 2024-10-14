@@ -1,3 +1,7 @@
+Lang
+----
+- [English](README.md)
+
 快速上手
 =======
 
