@@ -1,6 +1,6 @@
 Lang
 ----------
--[简体中文 (Simplified Chinese)](README-zh.md)
+- [简体中文 (Simplified Chinese)](README-zh.md)
 
 # wechat-tool
 ”This is a convient cmd app to manage your wechat miniprogram"
