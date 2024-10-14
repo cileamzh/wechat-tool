@@ -3,7 +3,8 @@
 
 基础配置
 =======
-在你的电脑中将wechat-tool所在目录加入环境变量PATH中
+在你的电脑中将wechat-tool所在目录加入环境变量PATH中,
+
 打开命令行，输入wct set devtoolpath "微信开发者工具所在路径"
 
 命令示例：
