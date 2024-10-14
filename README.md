@@ -1,12 +1,14 @@
 # wechat-tool
 ”This is a convient cmd app to manage your wechat miniprogram"
 
-# Getting start
+Getting start
+=============
 you should download this app and add it to your enviroument var PATH
 
 then key in the order "wct set devtoolpath [your wechatdeveloptool path]"
 
-# Orders:
+Orders:
+=======
 new
 ---
 open the cmd in the dir that you want to create a miniprogram
