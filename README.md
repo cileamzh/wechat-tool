@@ -1,4 +1,4 @@
-lang
+Lang
 ----------
 -[简体中文 (Simplified Chinese)](README-zh.md)
 
