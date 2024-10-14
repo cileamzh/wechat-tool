@@ -1,10 +1,11 @@
 use std::{
     collections::HashMap,
-    env::{current_dir, Args},
+    env::{args, current_dir, current_exe, Args},
     ffi::OsStr,
     fs,
-    path::PathBuf,
-    process::Command,
+    io::{self},
+    path::{Path, PathBuf},
+    process::{Child, Command},
 };
 
 //Function get_config is used to check and get the config
@@ -49,13 +50,12 @@ impl Config {
 }
 
 // excute the program with a path
-pub fn excute<I, S>(path: String, args: I) -> std::io::Result<()>
+pub fn excute<I, S>(path: String, args: I) -> std::io::Result<Child>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    Command::new(path).args(args).spawn()?;
-    Ok(())
+    Ok(Command::new(path).args(args).spawn()?)
 }
 
 // you commandline instruction will considered as a task
@@ -68,7 +68,7 @@ impl Task {
     pub fn from(mut args: Args) -> Task {
         let mut al: i32 = args.len() as i32;
         args.next();
-        let order = args.next().unwrap_or("noins".to_owned());
+        let order = args.next().unwrap_or("".to_owned());
         let mut map = HashMap::new();
         al = al - 2;
         loop {
@@ -92,14 +92,23 @@ impl Task {
 // Excutor is a tool to excute your task
 pub struct Excutor {
     pub config: Config,
-    cdir: PathBuf,
+    pub rundir: PathBuf,
+    pub exedir: PathBuf,
+    pub temdir: PathBuf,
 }
 
 impl Excutor {
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            cdir: current_dir().unwrap(),
+            rundir: current_dir().unwrap(),
+            exedir: current_exe().unwrap().parent().unwrap().to_path_buf(),
+            temdir: current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf()
+                .join("temp"),
         }
     }
     pub fn exe_task(&mut self, task: Task) -> std::io::Result<()> {
@@ -107,8 +116,9 @@ impl Excutor {
             "run" => {
                 excute(
                     self.config.clipath.clone(),
-                    ["open", "--project", &self.cdir.to_string_lossy()],
-                )?;
+                    ["open", "--project", &self.rundir.to_string_lossy()],
+                )?
+                .wait()?;
             }
             "preview" => {
                 excute(
@@ -116,17 +126,42 @@ impl Excutor {
                     [
                         "preview",
                         "--project",
-                        &self.cdir.to_string_lossy(),
+                        &self.rundir.to_string_lossy(),
                         "--qr-size",
-                        "small",
+                        task.params.get("-size").unwrap_or(&String::from("default")),
                     ],
-                )?;
+                )?
+                .wait()?;
             }
             "close" => {
                 excute(
                     self.config.clipath.clone(),
-                    ["close", "--project", &self.cdir.to_string_lossy()],
+                    ["close", "--project", &self.rundir.to_string_lossy()],
                 )?;
+            }
+            "upload" => {
+                excute(
+                    self.config.clipath.clone(),
+                    [
+                        "upload",
+                        "--project",
+                        &self.rundir.to_string_lossy(),
+                        "-v",
+                        task.params.get("-v").unwrap_or(&String::from("1.0.0")),
+                        "-d",
+                        task.params
+                            .get("-m")
+                            .unwrap_or(&String::from("\"common upload\"")),
+                    ],
+                )?
+                .wait()?;
+            }
+            "new" => {
+                let p = self
+                    .temdir
+                    .join(task.params.get("-temp").unwrap_or(&String::from("notemp")));
+                let temp = Path::new(&p);
+                copy_dir_all(temp, &self.rundir)?;
             }
             "quit" => {
                 excute(self.config.clipath.clone(), ["quit"])?;
@@ -138,10 +173,13 @@ impl Excutor {
                 excute(self.config.clipath.clone(), ["islogin"])?;
             }
             "cdir" => {
-                println!("{}", self.cdir.display())
+                println!("{}", self.rundir.display())
             }
             "help" => {
-                println!("{}", HELP);
+                println!(
+                    "{}",
+                    String::from_utf8_lossy(&fs::read(self.exedir.join("doc.md"))?)
+                );
             }
             // get the props
             "set" => {
@@ -164,19 +202,58 @@ impl Excutor {
                         "configpath" => {
                             println!("{}", self.config.cfgpath.display())
                         }
+                        "templist" => {
+                            let r = Path::new(&self.temdir).read_dir()?;
+                            for item in r {
+                                let item = item?;
+                                if item.path().is_dir() {
+                                    println!("{:?}", item.path().iter().last().unwrap());
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
             }
-            _ => {}
+            "direct" => {
+                let mut aarg = Vec::new();
+                for arg in args() {
+                    aarg.push(arg);
+                }
+                aarg.remove(0);
+                aarg.remove(0);
+                println!("{:?}", aarg);
+                excute(self.config.clipath.clone(), aarg)?;
+            }
+            _ => {
+                println!("key in help to get document")
+            }
         }
         Ok(())
     }
 }
 
-// This is the help document
-// Get this doc by inputing help
-static HELP: &str = "
-run : run your app in WechatDeveloperTool.
-config :change or get your setting infomation
-";
+fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
+    // if dir doesn't exist create a dir
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+
+    // iterate the source dir file
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
+            // if the path is a dir make a recursion
+            copy_dir_all(&src_path, &dst_path)?;
+        } else if file_type.is_file() {
+            // if it's a file copy it to the dir
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
