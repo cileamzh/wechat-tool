@@ -24,4 +24,8 @@ run
 open cmd in your program dir and key in "wct run",your program will 
 run in wechat developtool 
 
+help
+----
+getting help document
+
 
